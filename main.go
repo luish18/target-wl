@@ -43,8 +43,10 @@ type PocData struct {
 
 
 type Balance struct {
-    Account_id  string `json:",omitempty"`
-    Balance     string `json:",omitempty"`
+    User						string `json:",omitempty"`
+    Balance						int `json:",omitempty"`
+    Returnmsg					string `json:",omitempty"`
+
 }
 
 func main(){
@@ -56,7 +58,7 @@ func main(){
     defer cancel()
 
     http.HandleFunc("/get_balance", get_data)
-    http.HandleFunc("/update_balance", update_data)
+    http.HandleFunc("/deposit", update_data)
 
 
     source, err := workloadapi.NewX509Source(ctx, workloadapi.WithClientOptions(workloadapi.WithAddr(socketPath)))
@@ -104,7 +106,7 @@ func validate_dasvid(data string) (bool, error) {
     //getting assertingwl ip
     Iplocal := GetOutboundIP()
     StrIPlocal := fmt.Sprintf("%v", Iplocal)
-    serverURL := StrIPlocal + ":8443"
+    serverURL := StrIPlocal + ":8444"
 
 
     url_parts := []string{"https://", serverURL, "/validate?DASVID=", data}
@@ -195,10 +197,10 @@ func get_data(w http.ResponseWriter, r *http.Request){
     defer db.Close()
 
     var response Balance
-    account_id := r.FormValue("account_id")
+    user := r.FormValue("User")
 
     //query database for account id
-    query := "select" + account_id + "from balances"
+    query := "select " + user + " from balances;"
     rows, err := db.Query(query)
     if err != nil {
 
@@ -209,13 +211,13 @@ func get_data(w http.ResponseWriter, r *http.Request){
 
     for rows.Next() {
 
-        err = rows.Scan(&response.Account_id, &response.Balance)
+        err = rows.Scan(&response.User, &response.Balance)
         if err != nil {
 
             log.Fatalf("Unable to read rows")
         }
     }
-    log.Println("Read %v with balance %v from database", response.Account_id, response.Balance)
+    log.Println("Read %v with balance %v from database", response.User, response.Balance)
 
 
     json.NewEncoder(w).Encode(response)
@@ -256,11 +258,11 @@ func update_data(w http.ResponseWriter, r *http.Request){
     defer db.Close()
 
     var response Balance
-    account_id := r.FormValue("account_id")
+    user := r.FormValue("user")
     new_balance := r.FormValue("balance")
 
     //query database for account id
-    query := "update balances SET balance=" + new_balance + "where account_id=" + account_id
+    query := "update balances SET balance=" + new_balance + " where User=" + user
     _, err = db.Exec(query)
     if err != nil {
 
