@@ -1,26 +1,28 @@
 package main
 
 import (
-    "context"
-    "encoding/json"
-    "errors"
-    "fmt"
-    "io/ioutil"
-    "log"
-    "net"
-    "net/http"
-    "strings"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net"
+	"net/http"
+	"strconv"
+	"strings"
 
-    //Database
-    "database/sql"
+	"github.com/joomcode/errorx"
+	//Database
+	"database/sql"
 
-    // SPIFFE
-    "github.com/spiffe/go-spiffe/v2/spiffeid"
-    "github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
-    "github.com/spiffe/go-spiffe/v2/workloadapi"
+	// SPIFFE
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+	"github.com/spiffe/go-spiffe/v2/workloadapi"
 
-    // dasvid lib
-    dasvid "github.com/marco-developer/dasvid/poclib"
+	// dasvid lib
+	dasvid "github.com/marco-developer/dasvid/poclib"
 )
 
 const (
@@ -28,30 +30,43 @@ const (
 )
 
 type PocData struct {
-    AccessToken     			string `json:",omitempty"`
-    PublicKey					string `json:",omitempty"`
-    OauthSigValidation 			*bool `json:",omitempty"`
-    OauthExpValidation 			*bool `json:",omitempty"`
-    OauthExpRemainingTime		string `json:",omitempty"`
-    OauthClaims					map[string]interface{} `json:",omitempty"`
-    DASVIDToken					string `json:",omitempty"`
-    DASVIDClaims 				map[string]interface{} `json:",omitempty"`
-    DasvidExpValidation 		*bool `json:",omitempty"`
-    DasvidExpRemainingTime		string `json:",omitempty"`
-    DasvidSigValidation 		*bool `json:",omitempty"`
+    AccessToken             string `json:",omitempty"`
+    PublicKey               string `json:",omitempty"`
+    OauthSigValidation      *bool `json:",omitempty"`
+    OauthExpValidation      *bool `json:",omitempty"`
+    OauthExpRemainingTime   string `json:",omitempty"`
+    OauthClaims             map[string]interface{} `json:",omitempty"`
+    DASVIDToken             string `json:",omitempty"`
+    DASVIDClaims            map[string]interface{} `json:",omitempty"`
+    DasvidExpValidation     *bool `json:",omitempty"`
+    DasvidExpRemainingTime  string `json:",omitempty"`
+    DasvidSigValidation     *bool `json:",omitempty"`
  }
 
 
 type Balance struct {
-    User						string `json:",omitempty"`
-    Balance						int `json:",omitempty"`
-    Returnmsg					string `json:",omitempty"`
+    User        string `json:",omitempty"`
+    Balance     int `json:",omitempty"`
+    Returnmsg   string `json:",omitempty"`
 
 }
 
+func Handle_Error(err error, message string) (errorx.Error){
+
+    error := errorx.Cast(err)
+
+    if (message != ""){
+        errorx.Decorate(error, message)
+    }
+
+    if error != nil {
+        log.Fatalf("Error: %+v", *error)
+    }
+
+    return *error
+}
+
 func main(){
-
-
 
     // creates empty context to recieve an incoming request
     ctx, cancel := context.WithCancel(context.Background())
@@ -62,9 +77,7 @@ func main(){
 
 
     source, err := workloadapi.NewX509Source(ctx, workloadapi.WithClientOptions(workloadapi.WithAddr(socketPath)))
-    if err != nil {
-        log.Fatalf("Unable to create X509 source: %v", err)
-    }
+    Handle_Error(err, "Unable to create X509 source")
     defer source.Close()
 
     // Allowed SPIFFE ID - Client must be from this trust domain
@@ -78,19 +91,14 @@ func main(){
     }
 
     log.Printf("Start serving API...")
-    if err := server.ListenAndServeTLS("", ""); err != nil {
-        log.Fatalf("Error on serve: %v", err)
-    }
+    err = server.ListenAndServeTLS("", "")
+    Handle_Error(err, "Error on serve")
 
 }
 
-
-
 func GetOutboundIP() net.IP {
     conn, err := net.Dial("udp", "8.8.8.8:80")
-    if err != nil {
-        log.Fatal(err)
-    }
+    Handle_Error(err, "")
     defer conn.Close()
 
     localAddr := conn.LocalAddr().(*net.UDPAddr)
@@ -98,7 +106,8 @@ func GetOutboundIP() net.IP {
     return localAddr.IP
 }
 
-func validate_dasvid(data string) (bool, error) {
+
+func get_validation(data string) (PocData){
 
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
@@ -116,13 +125,13 @@ func validate_dasvid(data string) (bool, error) {
 
     // Create a `workloadapi.X509Source`, it will connect to Workload API using provided socket path
     source, err := workloadapi.NewX509Source(ctx, workloadapi.WithClientOptions(workloadapi.WithAddr(socketPath)))
-    if err != nil {
-        log.Fatalf("Unable to create X509Source %v", err)
-    }
+    Handle_Error(err, "Unable to create X509Source")
     defer source.Close()
+
 
     // Allowed SPIFFE ID
     serverID := spiffeid.RequireTrustDomainFromString("example.org")
+
 
     // Create a `tls.Config` to allow mTLS connections, and verify that presented certificate match allowed SPIFFE ID rule
     tlsConfig := tlsconfig.MTLSClientConfig(source, source, tlsconfig.AuthorizeMemberOf(serverID))
@@ -135,19 +144,27 @@ func validate_dasvid(data string) (bool, error) {
 
     //sending request
     r, err := client.Get(endpoint)
-    if err != nil {
-        log.Fatalf("Error connecting to %q: %v", serverURL, err)
-    }
+
+    errorMsg := "Error connecting to " + serverURL
+    Handle_Error(err, errorMsg)
+
 
     defer r.Body.Close()
     body, err := ioutil.ReadAll(r.Body)
-    if err != nil {
-        log.Fatalf("Unable to read body: %v", err)
-    }
+    Handle_Error(err, "Unable to read body")
+
 
     var result PocData
     json.Unmarshal(body, &result)
 
+
+    return result
+}
+
+
+func validate_dasvid(data string) (bool, error) {
+
+    result := get_validation(data)
 
     //validating response
     if !(*result.DasvidExpValidation){
@@ -190,11 +207,9 @@ func get_data(w http.ResponseWriter, r *http.Request){
     var db *sql.DB
 
     db, err = sql.Open("sqlite3", "./balances.db")
-    if err != nil {
-
-        log.Fatalf("Unable to open database balances.db: %v", err)
-    }
+    Handle_Error(err, "Unable to open database balances.db")
     defer db.Close()
+
 
     var response Balance
     user := r.FormValue("User")
@@ -212,16 +227,12 @@ func get_data(w http.ResponseWriter, r *http.Request){
     for rows.Next() {
 
         err = rows.Scan(&response.User, &response.Balance)
-        if err != nil {
-
-            log.Fatalf("Unable to read rows")
-        }
+        Handle_Error(err, "Unable do read rows")
     }
     log.Println("Read %v with balance %v from database", response.User, response.Balance)
 
 
     json.NewEncoder(w).Encode(response)
-
 }
 
 
@@ -251,10 +262,7 @@ func update_data(w http.ResponseWriter, r *http.Request){
     var db *sql.DB
 
     db, err = sql.Open("sqlite3", "./balances.db")
-    if err != nil {
-
-        log.Fatalf("Unable to open database balances.db: %v", err)
-    }
+    Handle_Error(err, "Unable to open database balances.db")
     defer db.Close()
 
     var response Balance
@@ -264,10 +272,7 @@ func update_data(w http.ResponseWriter, r *http.Request){
     //query database for account id
     query := "update balances SET balance=" + new_balance + " where User=" + user
     _, err = db.Exec(query)
-    if err != nil {
-
-        log.Fatalf("Unable to update database")
-    }
+    Handle_Error(err, "Unable do update database")
 
 
     json.NewEncoder(w).Encode(response)
