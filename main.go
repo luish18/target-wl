@@ -50,7 +50,9 @@ type Balance struct {
 
 }
 
-func Handle_Error(err error, message string) (errorx.Error){
+// Handle_error recieves an error and a message, and returns the decorated error
+// On recieving a non nil error, the function calls a fatal exception and logs the error
+func Handle_error(err error, message string) (errorx.Error){
 
     error := errorx.Cast(err)
 
@@ -76,7 +78,7 @@ func main(){
 
 
     source, err := workloadapi.NewX509Source(ctx, workloadapi.WithClientOptions(workloadapi.WithAddr(socketPath)))
-    Handle_Error(err, "Unable to create X509 source")
+    Handle_error(err, "Unable to create X509 source")
     defer source.Close()
 
     // Allowed SPIFFE ID - Client must be from this trust domain
@@ -91,13 +93,14 @@ func main(){
 
     log.Printf("Start serving API...")
     err = server.ListenAndServeTLS("", "")
-    Handle_Error(err, "Error on serve")
+    Handle_error(err, "Error on serve")
 
 }
 
+// GetOutboundIP currently returns the local address at 8.8.8.8:80
 func GetOutboundIP() net.IP {
     conn, err := net.Dial("udp", "8.8.8.8:80")
-    Handle_Error(err, "")
+    Handle_error(err, "")
     defer conn.Close()
 
     localAddr := conn.LocalAddr().(*net.UDPAddr)
@@ -105,7 +108,8 @@ func GetOutboundIP() net.IP {
     return localAddr.IP
 }
 
-
+// get_validation calls the "validate" endpoint on the asserting workload with the recieved "data" string
+// and returns the result of the DASVID validation
 func get_validation(data string) (PocData){
 
     ctx, cancel := context.WithCancel(context.Background())
@@ -124,7 +128,7 @@ func get_validation(data string) (PocData){
 
     // Create a `workloadapi.X509Source`, it will connect to Workload API using provided socket path
     source, err := workloadapi.NewX509Source(ctx, workloadapi.WithClientOptions(workloadapi.WithAddr(socketPath)))
-    Handle_Error(err, "Unable to create X509Source")
+    Handle_error(err, "Unable to create X509Source")
     defer source.Close()
 
 
@@ -145,12 +149,12 @@ func get_validation(data string) (PocData){
     r, err := client.Get(endpoint)
 
     errorMsg := "Error connecting to " + serverURL
-    Handle_Error(err, errorMsg)
+    Handle_error(err, errorMsg)
 
 
     defer r.Body.Close()
     body, err := ioutil.ReadAll(r.Body)
-    Handle_Error(err, "Unable to read body")
+    Handle_error(err, "Unable to read body")
 
 
     var result PocData
@@ -160,15 +164,22 @@ func get_validation(data string) (PocData){
     return result
 }
 
-
+// validate_dasvid uses the asserting workload "validate" endpoint to validate
+// Exp and sign validation for the recieved "data" string
+// The function returns false on failing any validation, along with an error specifying the invalid field(s)
 func validate_dasvid(data string) (bool, error) {
 
     result := get_validation(data)
 
     //validating response
+    if !(*result.DasvidExpValidation) && !(*result.DasvidSigValidation){
+
+        return false, errors.New("DASIVD expired and with invalid signature")
+    }
+
     if !(*result.DasvidExpValidation){
 
-        return false, errors.New("DASVID expired!")
+        return false, errors.New("DASVID expired")
     }
 
     if !(*result.DasvidSigValidation){
@@ -179,8 +190,9 @@ func validate_dasvid(data string) (bool, error) {
     return true, nil
 }
 
-
-func get_data(w http.ResponseWriter, r *http.Request){
+// get_balance endpoint validates the DASVID with validate_dasvid()
+// and returns the required data to caller
+func get_balance(w http.ResponseWriter, r *http.Request){
 
     data := r.FormValue("DASVID")
     validate_result, err := validate_dasvid(data)
@@ -206,7 +218,7 @@ func get_data(w http.ResponseWriter, r *http.Request){
     var db *sql.DB
 
     db, err = sql.Open("sqlite3", "./balances.db")
-    Handle_Error(err, "Unable to open database balances.db")
+    Handle_error(err, "Unable to open database balances.db")
     defer db.Close()
 
 
@@ -226,7 +238,7 @@ func get_data(w http.ResponseWriter, r *http.Request){
     for rows.Next() {
 
         err = rows.Scan(&response.User, &response.Balance)
-        Handle_Error(err, "Unable do read rows")
+        Handle_error(err, "Unable do read rows")
     }
     log.Println("Read %v with balance %v from database", response.User, response.Balance)
 
@@ -234,7 +246,8 @@ func get_data(w http.ResponseWriter, r *http.Request){
     json.NewEncoder(w).Encode(response)
 }
 
-
+// update_data endpoint validates the DASVID with validate_dasvid()
+// and updates the balance database
 func update_data(w http.ResponseWriter, r *http.Request){
 
     data := r.FormValue("DASVID")
@@ -261,7 +274,7 @@ func update_data(w http.ResponseWriter, r *http.Request){
     var db *sql.DB
 
     db, err = sql.Open("sqlite3", "./balances.db")
-    Handle_Error(err, "Unable to open database balances.db")
+    Handle_error(err, "Unable to open database balances.db")
     defer db.Close()
 
     var response Balance
@@ -271,7 +284,7 @@ func update_data(w http.ResponseWriter, r *http.Request){
     //query database for account id
     query := "update balances SET balance=" + new_balance + " where User=" + user
     _, err = db.Exec(query)
-    Handle_Error(err, "Unable do update database")
+    Handle_error(err, "Unable do update database")
 
 
     json.NewEncoder(w).Encode(response)
