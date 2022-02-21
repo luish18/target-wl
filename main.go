@@ -1,28 +1,27 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io/ioutil"
-	"log"
-	"net"
-	"net/http"
-	"strconv"
-	"strings"
+    "context"
+    "encoding/json"
+    "errors"
+    "fmt"
+    "io/ioutil"
+    "log"
+    "net"
+    "net/http"
+    "strings"
 
-	"github.com/joomcode/errorx"
-	//Database
-	"database/sql"
+    "github.com/joomcode/errorx"
+    //Database
+    "database/sql"
 
-	// SPIFFE
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
-	"github.com/spiffe/go-spiffe/v2/workloadapi"
+    // SPIFFE
+    "github.com/spiffe/go-spiffe/v2/spiffeid"
+    "github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
+    "github.com/spiffe/go-spiffe/v2/workloadapi"
 
-	// dasvid lib
-	dasvid "github.com/marco-developer/dasvid/poclib"
+    // dasvid lib
+    dasvid "github.com/marco-developer/dasvid/poclib"
 )
 
 const (
