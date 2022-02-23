@@ -1,6 +1,7 @@
 package main
 
 import (
+    "strconv"
     "context"
     "encoding/json"
     "errors"
@@ -73,7 +74,7 @@ func main(){
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    http.HandleFunc("/get_balance", get_data)
+    http.HandleFunc("/get_balance", get_balance)
     http.HandleFunc("/deposit", update_data)
 
 
@@ -227,17 +228,17 @@ func get_balance(w http.ResponseWriter, r *http.Request){
 
     //query database for account id
     query := "select " + user + " from balances;"
-    rows, err := db.Query(query)
-    if err != nil {
 
-        log.Fatalf("Unable to query database")
-    }
+    //get database rows
+    rows, err := db.Query(query)
+    Handle_error(err, "Unable to query database")
     defer rows.Close()
 
 
     for rows.Next() {
 
         err = rows.Scan(&response.User, &response.Balance)
+        response.Returnmsg = err.Error()
         Handle_error(err, "Unable do read rows")
     }
     log.Println("Read %v with balance %v from database", response.User, response.Balance)
@@ -278,11 +279,32 @@ func update_data(w http.ResponseWriter, r *http.Request){
     defer db.Close()
 
     var response Balance
-    user := r.FormValue("user")
-    new_balance := r.FormValue("balance")
+    user := r.FormValue("User")
+    added_balance := r.FormValue("Balance")
 
     //query database for account id
-    query := "update balances SET balance=" + new_balance + " where User=" + user
+    query := "select " + user + " from balances;"
+
+    //get database rows
+    rows, err := db.Query(query)
+    Handle_error(err, "Unable to query database")
+    defer rows.Close()
+
+    var user_data Balance
+    for rows.Next() {
+
+        err = rows.Scan(&user_data.User, &user_data.Balance)
+        user_data.Returnmsg = err.Error()
+        Handle_error(err, "Unable do read rows")
+    }
+
+    old_balance := user_data.Balance
+    int_added_balance, err := strconv.Atoi(added_balance)
+    Handle_error(err, "")
+
+    new_balance := strconv.Itoa(old_balance + int_added_balance)
+    
+    query = "update balances SET balance=" + new_balance + " where User=" + user
     _, err = db.Exec(query)
     Handle_error(err, "Unable do update database")
 
